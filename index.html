@@ -66,7 +66,7 @@ body { background-color: white; padding: 0; }
 .page-break-avoid { break-inside: avoid; page-break-inside: avoid; }
 /* Khi in: Chỉnh nét vẽ mỏng nhưng sử dụng màu TỐI HƠN để máy in không bị mất nét (Tăng sắc lẹm) */
 .oly-bg { border: 0.5pt solid #545557 !important; }
-.stroke-small { stroke: #D4DEEB !important; stroke-width: 0.5pt !important; }
+.stroke-small { stroke: #cbd5e1 !important; stroke-width: 0.5pt !important; }
 .stroke-large { stroke: #64748b !important; stroke-width: 0.75pt !important; }
 /* CSS đặc biệt: Ép 1 bài trải dài full 1 trang A4 và lấp đầy ô ly */
 body.print-full-page .tu-luan-item {
@@ -83,7 +83,7 @@ display: flex;
 flex-direction: column;
 margin-bottom: 0;
 }
-/* Đảm bảo khung bọc 2 cột (Tóm tắt - Bài giải) được giãn ra theo chiều dọc */
+/* Đảm bảo khung bọc 1 cột hoặc 2 cột được giãn ra theo chiều dọc */
 body.print-full-page .student-workspace > div {
 flex-grow: 1;
 display: flex;
@@ -256,16 +256,12 @@ document.body.classList.remove('print-full-page');
 function generateVectorGrid(baseHeight) {
 let pathSmall = "";
 let pathLarge = "";
-const gridWidth = 1200; // Đủ rộng phủ kín khổ A4 ngang/dọc
-// Khi bật "Lấp đầy trang in", oly-bg sẽ giãn ra cực đại.
-// Ta vẽ sẵn lưới dài 1500px (dư sức phủ kín A4). CSS overflow:hidden sẽ tự cắt phần thừa đi.
+const gridWidth = 1200;
 const gridHeight = Math.max(baseHeight, 1500);
-// Vẽ các đường kẻ ngang
 for (let y = 10; y <= gridHeight; y += 10) {
 if (y % 40 === 0) pathLarge += `M 0 ${y} H ${gridWidth} `;
 else pathSmall += `M 0 ${y} H ${gridWidth} `;
 }
-// Vẽ các đường kẻ dọc
 for (let x = 10; x <= gridWidth; x += 10) {
 if (x % 40 === 0) pathLarge += `M ${x} 0 V ${gridHeight} `;
 else pathSmall += `M ${x} 0 V ${gridHeight} `;
@@ -281,8 +277,12 @@ if(!exam) return;
 document.getElementById('exam-title-number').innerText = exam.title;
 document.getElementById('exam-time').innerText = '⏱️ ' + exam.time;
 document.getElementById('exam-level').innerText = '⭐ ' + exam.level;
-let htmlStr = `<div class="mb-10"><h3 class="text-2xl font-bold text-indigo-700 border-b-2 border-indigo-100 pb-2 mb-6 uppercase">Phần 1: Trắc nghiệm khách quan</h3>`;
-if(exam.trac_nghiem && exam.trac_nghiem.length > 0) {
+let htmlStr = "";
+const hasTracNghiem = exam.trac_nghiem && exam.trac_nghiem.length > 0;
+const hasTuLuan = exam.tu_luan && exam.tu_luan.length > 0;
+// ================= RENDER TRẮC NGHIỆM =================
+if (hasTracNghiem) {
+htmlStr += `<div class="mb-10"><h3 class="text-2xl font-bold text-indigo-700 border-b-2 border-indigo-100 pb-2 mb-6 uppercase">Phần 1: Trắc nghiệm khách quan</h3>`;
 exam.trac_nghiem.forEach((q, index) => {
 let maxOptLen = Math.max(...q.options.map(opt => opt.length));
 let gridCols = "grid-cols-2 md:grid-cols-4";
@@ -301,30 +301,16 @@ htmlStr += `</div>`;
 if(q.explain) htmlStr += `<div class="answer-explanation mt-3 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-sm text-yellow-800 rounded">${q.explain}</div>`;
 htmlStr += `</div>`;
 });
-} else {
-htmlStr += `<div class="text-gray-500 italic">Không có câu hỏi trắc nghiệm.</div>`;
+htmlStr += `</div>`;
 }
-htmlStr += `</div><div class="tu-luan-wrapper">`;
-if(exam.tu_luan && exam.tu_luan.length > 0) {
+// ================= RENDER TỰ LUẬN KÈM VỞ Ô LY VECTOR =================
+if (hasTuLuan) {
 exam.tu_luan.forEach((t, index) => {
-// TÍNH TOÁN SMART FALLBACK (Dành cho hiển thị tiêu chuẩn khi không tích Auto-Fill)
 let totalLines = 4;
 if (t.solution) {
-let actualLines = 0;
-const textBlocks = t.solution.split(/<li[^>]*>|<br[^>]*>/gi).filter(l => l.trim().length > 0);
-textBlocks.forEach(block => {
-let blockHeight = 1;
-if (/\\dfrac/g.test(block)) blockHeight += 1;
-let cleanText = block.replace(/<[^>]*>?/gm, '');
-cleanText = cleanText.replace(/\\dfrac/g, '');
-cleanText = cleanText.replace(/\\[a-zA-Z]+/g, '');
-cleanText = cleanText.replace(/[\$\{\}]/g, '');
-const visualLength = cleanText.length;
-if (visualLength > 85) blockHeight += Math.floor(visualLength / 85);
-actualLines += blockHeight;
-});
-const hasSvg = /<svg/i.test(t.solution) || /<svg/i.test(t.t_content);
-if (hasSvg) actualLines += 8;
+const listItemsCount = (t.solution.match(/<li[^>]*>/gi) || []).length;
+const brCount = (t.solution.match(/<br[^>]*>/gi) || []).length;
+let actualLines = listItemsCount + brCount;
 if (actualLines === 0) actualLines = 3;
 totalLines = actualLines + 2;
 }
@@ -332,35 +318,52 @@ if (t.lines_needed) {
 totalLines = t.lines_needed;
 }
 const lineSize = 40;
-const baiGiaiHeight = totalLines * lineSize;
-// Dùng hàm vẽ lưới Vector để chèn trực tiếp vào DOM
-const vectorGridHTML = generateVectorGrid(baiGiaiHeight);
-// Gom tiêu đề Phần 2 vào chung khối với Bài 1 để không bị rớt dòng mồ côi khi in
-let displayTitle = index === 0 ? `<span class="uppercase text-indigo-700 text-xl block mb-2 border-b-2 border-indigo-100 pb-1">PHẦN 2: TỰ LUẬN</span>${t.t_title}` : t.t_title;
-// Thêm class tu-luan-item để áp dụng logic giãn nở Flexbox khi in
-htmlStr += `
-<div class="mb-12 page-break-avoid tu-luan-item">
-<p class="font-bold text-lg mb-3">${displayTitle}:</p><div class="text-lg leading-relaxed">${t.t_content}</div>
-<!-- Vùng vở ô ly -->
-<div class="student-workspace">
-<div class="flex flex-col md:flex-row gap-6 h-full">
+const workspaceHeight = totalLines * lineSize;
+const vectorGridHTML = generateVectorGrid(workspaceHeight);
+// KIỂM TRA ĐIỀU KIỆN ĐỂ VẼ 1 CỘT HAY 2 CỘT
+// Chỉ vẽ 2 cột (có Tóm tắt) nếu trong phần solution có nhắc đến cụm từ "Tóm tắt:"
+const hasTomTat = t.solution ? /Tóm tắt:/i.test(t.solution) : false;
+let workspaceHTML = "";
+if (hasTomTat) {
+workspaceHTML = `
+<div class="flex flex-col md:flex-row gap-6 h-full w-full">
 <!-- Cột Tóm tắt -->
 <div class="w-full md:w-1/3 hidden md:flex flex-col">
 <p class="font-bold text-indigo-600 mb-2">✍️ Tóm tắt:</p>
-<div class="oly-bg shadow-sm" style="min-height: ${baiGiaiHeight}px;">
+<div class="oly-bg shadow-sm" style="min-height: ${workspaceHeight}px;">
 ${vectorGridHTML}
 </div>
 </div>
 <!-- Cột Bài giải -->
 <div class="w-full md:w-2/3 flex flex-col">
 <p class="font-bold text-indigo-600 mb-2">✍️ Bài giải:</p>
-<div class="oly-bg shadow-sm" style="min-height: ${baiGiaiHeight}px;">
+<div class="oly-bg shadow-sm" style="min-height: ${workspaceHeight}px;">
 ${vectorGridHTML}
 </div>
 </div>
+</div>`;
+} else {
+workspaceHTML = `
+<div class="flex flex-col h-full w-full">
+<!-- Cột Bài giải (Trải dài 100%) -->
+<div class="w-full flex flex-col flex-grow">
+<p class="font-bold text-indigo-600 mb-2">✍️ Bài giải:</p>
+<div class="oly-bg shadow-sm" style="min-height: ${workspaceHeight}px;">
+${vectorGridHTML}
 </div>
 </div>
-<!-- Lời giải chi tiết (Ẩn mặc định) -->
+</div>`;
+}
+// Gắn tiêu đề "Phần 2: Tự Luận" vào bài đầu tiên
+let displayTitle = index === 0 ? `<span class="uppercase text-indigo-700 text-2xl font-bold block mb-4 border-b-2 border-indigo-100 pb-2">PHẦN 2: TỰ LUẬN</span>${t.t_title}` : t.t_title;
+htmlStr += `
+<div class="mb-12 page-break-avoid tu-luan-item">
+<p class="font-bold text-lg mb-3">${displayTitle}:</p><div class="text-lg leading-relaxed">${t.t_content}</div>
+<!-- Vùng vở ô ly thông minh (1 cột hoặc 2 cột) -->
+<div class="student-workspace">
+${workspaceHTML}
+</div>
+<!-- Lời giải chi tiết -->
 <div class="answer-explanation mt-4 bg-green-50 p-5 rounded-xl border border-green-200">
 <div class="font-bold text-green-800 mb-2">🎯 CHIẾN THUẬT TƯ DUY:</div><p class="text-green-700 text-sm mb-4">${t.strategy}</p>
 <div class="font-bold text-green-800 mb-2">📝 TRÌNH BÀY LỜI GIẢI:</div><ul class="list-disc ml-5 space-y-2 text-gray-800">${t.solution}</ul>
@@ -370,14 +373,17 @@ ${vectorGridHTML}
 } else {
 htmlStr += `<h3 class="text-2xl font-bold text-indigo-700 border-b-2 border-indigo-100 pb-2 mb-6 uppercase">Phần 2: Tự luận</h3><div class="text-gray-500 italic">Không có câu hỏi tự luận.</div>`;
 }
-htmlStr += `</div>`;
 document.getElementById('exam-dynamic-content').innerHTML = htmlStr;
+// Khôi phục trạng thái
 document.body.classList.remove('show-answers', 'testing-mode', 'print-full-page');
-document.getElementById('fillPageToggle').checked = false; // Reset checkbox
+const printToggleCb = document.getElementById('fillPageToggle');
+if (printToggleCb) printToggleCb.checked = false;
 resetAnswerBtn();
 resetTestingBtn();
 document.getElementById('menu-view').classList.add('hidden');
 document.getElementById('exam-view').classList.remove('hidden');
+const printToggle = document.getElementById('printFullPageWrapper');
+if(printToggle) printToggle.classList.add('hidden');
 window.scrollTo(0, 0);
 renderMathInElement(document.getElementById('exam-dynamic-content'), {
 delimiters: [ {left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false} ],
@@ -464,6 +470,8 @@ function scrollToTop() {
 window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>
+</body>
+</html>
 <!-- ==================== ĐỀ SỐ 1 ==================== -->
 <script>
 window.EXAM_DATA = window.EXAM_DATA || [];
@@ -1153,6 +1161,58 @@ tu_luan: [
 { t_title: "Bài 2", t_content: "Đúng ghi Đ, sai ghi S vào ô trống:<br>Cho biết chiều cao của một số tòa nhà như sau:<br><div class='my-4 w-full max-w-sm mx-auto border border-gray-400 rounded-lg overflow-hidden shadow-sm text-center'><div class='grid grid-cols-2 bg-gray-100 font-bold border-b border-gray-400'><div class='p-2 border-r border-gray-400'>Tên tòa nhà</div><div class='p-2'>Chiều cao</div></div><div class='grid grid-cols-2 border-b border-gray-200'><div class='p-2 border-r border-gray-200 font-semibold'>A</div><div class='p-2'>$272\\text{ m}$</div></div><div class='grid grid-cols-2 border-b border-gray-200'><div class='p-2 border-r border-gray-200 font-semibold'>B</div><div class='p-2'>$461\\text{ m}$</div></div><div class='grid grid-cols-2 border-b border-gray-200'><div class='p-2 border-r border-gray-200 font-semibold'>C</div><div class='p-2'>$336\\text{ m}$</div></div><div class='grid grid-cols-2'><div class='p-2 border-r border-gray-200 font-semibold'>D</div><div class='p-2'>$267\\text{ m}$</div></div></div>Trong các tòa nhà trên:<br>a. Tòa nhà C cao hơn tòa nhà D. [....]<br>b. Tòa nhà B cao nhất. [....]<br>c. Tòa nhà A thấp nhất. [....]", lines_needed: 5, strategy: "So sánh các số đo chiều cao: $267 < 272 < 336 < 461$. Dựa vào đó để biết tòa B cao nhất, tòa D thấp nhất. Sau đó đối chiếu với các phát biểu.", solution: "<li><span class='font-bold text-blue-700'>Bài giải:</span><br>a. Tòa nhà C cao hơn tòa nhà D. <strong>[<span class='text-red-600'>Đ</span>]</strong></li><li>b. Tòa nhà B cao nhất. <strong>[<span class='text-red-600'>Đ</span>]</strong></li><li>c. Tòa nhà A thấp nhất. <strong>[<span class='text-red-600'>S</span>]</strong></li><li class='font-bold mt-2 text-indigo-700'>Đáp số: a) Đ; b) Đ; c) S.</li>" },
 { t_title: "Bài 3", t_content: "Một sợi dây dài $20\\text{ dm}$ được cắt thành $5$ đoạn bằng nhau. Hỏi mỗi đoạn dây dài bao nhiêu đề-xi-mét?", lines_needed: 4, strategy: "Sợi dây cắt thành các đoạn bằng nhau, ta dùng phép tính chia.", solution: "<li><span class='font-bold text-blue-700'>Tóm tắt:</span><br>Sợi dây: $20\\text{ dm}$<br>Cắt thành: $5$ đoạn<br>Mỗi đoạn: $\\dots\\text{ dm}$?</li><li><span class='font-bold text-blue-700'>Bài giải:</span><br>Mỗi đoạn dây dài số đề-xi-mét là:<br>$20 : 5 = 4\\text{ (dm)}$</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $4\\text{ dm}$.</li>" },
 { t_title: "Bài 4", t_content: "Số bị chia là số tròn chục liền trước của số $30$. Số chia là $2$. Tìm thương của hai số đó.", lines_needed: 5, strategy: "Bài toán 2 bước giải: Bước 1: Tìm 'số tròn chục liền trước số 30' để xác định Số bị chia. Bước 2: Thực hiện phép chia.", solution: "<li><span class='font-bold text-blue-700'>Bài giải:</span><br>Số tròn chục liền trước số $30$ là $20$.</li><li>Vậy Số bị chia là $20$, Số chia là $2$.</li><li>Thương của hai số đó là:<br>$20 : 2 = 10$</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $10$.</li>" }
+]
+});
+</script>
+<!-- ==================== ĐỀ KIỂM TRA CUỐI KÌ 2 - ĐỀ SỐ 6 (TỪ ẢNH) ==================== -->
+<script>
+window.EXAM_DATA = window.EXAM_DATA || [];
+window.EXAM_DATA.push({
+id: 29, title: "ĐỀ KIỂM TRA CUỐI KÌ 2 - ĐỀ SỐ 6 (KNTT)", icon: "📸", color: "blue", level: "Cơ bản & Nâng cao", time: "40 phút",
+trac_nghiem: [
+{ q_title: "Câu 1", q_content: "Trong các số: $473; 347; 734; 374$&nbsp;số bé nhất là:", options: ["A. $347$", "B. $473$", "C. $374$", "D. $734$"], correct_idx: 0, explain: "So sánh chữ số hàng trăm: $3 < 4 < 7$. Ta có $2$&nbsp;số bắt đầu bằng $3$ là $347$ và $374$. So sánh tiếp hàng chục: $4 < 7$ nên $347 < 374$. Vậy số bé nhất là $347$." },
+{ q_title: "Câu 2", q_content: "Số $785$&nbsp;đọc là:", options: ["A. Bảy trăm tám lăm", "B. Bảy trăm tám mươi lăm", "C. Bảy trăm tám mươi năm", "D. Bảy trăm tám năm"], correct_idx: 1, explain: "Số $785$&nbsp;gồm $7$&nbsp;trăm, $8$&nbsp;chục, $5$&nbsp;đơn vị. Đọc chuẩn là: Bảy trăm tám mươi lăm." },
+{ q_title: "Câu 3", q_content: "Đồng hồ chỉ mấy giờ?<br><svg width='120' height='120' viewBox='0 0 100 100' class='mx-auto my-6'><circle cx='50' cy='50' r='45' fill='#f9fafb' stroke='#1f2937' stroke-width='2.5'/><circle cx='50' cy='50' r='4' fill='#1f2937'/><text x='50' y='22' text-anchor='middle' font-weight='bold' font-size='12' fill='#374151'>12</text><text x='50' y='84' text-anchor='middle' font-weight='bold' font-size='12' fill='#374151'>6</text><text x='84' y='54' text-anchor='middle' font-weight='bold' font-size='12' fill='#374151'>3</text><text x='16' y='54' text-anchor='middle' font-weight='bold' font-size='12' fill='#374151'>9</text><line x1='50' y1='50' x2='75' y2='50' stroke='#1f2937' stroke-width='2.5' stroke-linecap='round'/><line x1='50' y1='50' x2='47' y2='68' stroke='#ef4444' stroke-width='3.5' stroke-linecap='round'/></svg>", options: ["A. $3$&nbsp;giờ&nbsp;$3$&nbsp;phút", "B. $6$&nbsp;giờ&nbsp;$15$&nbsp;phút", "C. $6$&nbsp;giờ&nbsp;$3$&nbsp;phút", "D. $3$&nbsp;giờ&nbsp;$15$&nbsp;phút"], correct_idx: 1, explain: "Kim ngắn (màu đỏ) chỉ hướng qua số $6$ một chút là $6$&nbsp;giờ. Kim dài (màu đen) chỉ đúng số $3$ là $15$&nbsp;phút. Vậy đồng hồ chỉ $6$&nbsp;giờ&nbsp;$15$&nbsp;phút." },
+{ q_title: "Câu 4", q_content: "Thứ Tư tuần này là ngày&nbsp;$17$ tháng&nbsp;$4$, thứ Tư tuần sau là ngày:", options: ["A. Ngày&nbsp;$24$", "B. Ngày&nbsp;$25$", "C. Ngày&nbsp;$26$", "D. Ngày&nbsp;$28$"], correct_idx: 0, explain: "Mỗi tuần có $7$&nbsp;ngày. Từ thứ Tư tuần này đến thứ Tư tuần sau cách nhau đúng $7$&nbsp;ngày. Ta cộng thêm: $17 + 7 = 24$. Vậy thứ Tư tuần sau là ngày&nbsp;$24$." },
+{ q_title: "Câu 5", q_content: "Số lượng con vật trong hình là:<br><div class='flex flex-col items-center justify-center bg-blue-50 border-2 border-blue-200 rounded-xl p-4 my-6 max-w-sm mx-auto shadow-sm'><div class='text-3xl tracking-widest mb-3'>🦋 🦋 🦋 🐝 🐝</div><div class='text-3xl tracking-widest'>🦋 🦋 🦋 🐝 🐝</div></div>", options: ["A. $3$&nbsp;con ong,&nbsp;$6$&nbsp;con bướm", "B. $5$&nbsp;con ong,&nbsp;$5$&nbsp;con bướm", "C. $4$&nbsp;con ong,&nbsp;$6$&nbsp;con bướm", "D. $4$&nbsp;con bướm,&nbsp;$6$&nbsp;con ong"], correct_idx: 2, explain: "Đếm số bướm (🦋): Mỗi hàng có $3$&nbsp;con, $2$&nbsp;hàng có $3 + 3 = 6$&nbsp;con bướm. Đếm số ong (🐝): Mỗi hàng có $2$&nbsp;con, $2$&nbsp;hàng có $2 + 2 = 4$&nbsp;con ong. Vậy có $4$&nbsp;con ong,&nbsp;$6$&nbsp;con bướm." },
+{ q_title: "Câu 6", q_content: "Sợi dây thứ nhất dài $245\\text{ m}$, sợi dây thứ hai dài hơn sợi dây thứ nhất là $17\\text{ m}$. Hỏi sợi dây thứ hai dài bao nhiêu mét?", options: ["A. $262\\text{ cm}$", "B. $233\\text{ cm}$", "C. $262\\text{ m}$", "D. $135\\text{ cm}$"], correct_idx: 2, explain: "Sợi dây thứ hai dài hơn nên ta làm phép cộng: $245 + 17 = 262\\text{ (m)}$. <strong>Bẫy đơn vị:</strong> Đề hỏi mét nên đáp án phải có đơn vị là $m$." }
+],
+tu_luan: [
+{ t_title: "Bài 1", t_content: "a) Đặt tính rồi tính:<br>$304 + 28$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; $984 - 673$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; $515 + 239$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; $705 - 261$<br><br>b) Tính:<br>$5 \\times 8 = \\dots\\dots$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; $45 : 5 = \\dots\\dots$", strategy: "Phần a: Đặt tính thẳng cột dọc, chú ý phép tính có nhớ. Phần b: Nhẩm lại bảng nhân 5 và bảng chia 5 để điền kết quả.", solution: "<li><span class='font-bold text-blue-700'>Bài giải:</span><br><strong>a) Đặt tính rồi tính:</strong></li><div class='flex flex-wrap gap-8 justify-around my-4 text-lg'><div>$$\\begin{array}{rr} & 304 \\\\ + & 28 \\\\ \\hline & \\mathbf{\\color{red}{332}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 984 \\\\ - & 673 \\\\ \\hline & \\mathbf{\\color{red}{311}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 515 \\\\ + & 239 \\\\ \\hline & \\mathbf{\\color{red}{754}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 705 \\\\ - & 261 \\\\ \\hline & \\mathbf{\\color{red}{444}} \\end{array}$$</div></div><li><strong>b) Tính:</strong></li><li>$5 \\times 8 = \\mathbf{\\color{red}{40}}$</li><li>$45 : 5 = \\mathbf{\\color{red}{9}}$</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: Đã tính ở trên.</li>" },
+{ t_title: "Bài 2", t_content: "Khối lớp Hai có $305$&nbsp;học sinh, trong đó có $175$&nbsp;học sinh nam. Hỏi khối Hai có bao nhiêu học sinh nữ?", strategy: "Biết tổng số học sinh và số học sinh nam. Muốn tìm số học sinh nữ, ta lấy tổng số học sinh trừ đi số học sinh nam.", solution: "<li><span class='font-bold text-blue-700'>Tóm tắt:</span><br>Khối Hai: $305$&nbsp;học sinh<br>Nam: $175$&nbsp;học sinh<br>Nữ: $\\dots$&nbsp;học sinh?</li><li><span class='font-bold text-blue-700'>Bài giải:</span><br>Khối Hai có số học sinh nữ là:<br>$305 - 175 = 130$&nbsp;(học sinh)</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $130$&nbsp;học sinh nữ.</li>" },
+{ t_title: "Bài 3", t_content: "Gia đình Mai có $6$&nbsp;người. Hàng ngày, Mai đều giúp mẹ sắp đũa ra bàn. Hỏi Mai cần sắp ra bàn bao nhiêu chiếc đũa?", strategy: "<strong>Tư duy thực tế ẩn:</strong> Đề bài không cho con số thứ hai, nhưng học sinh phải tự hiểu thực tế: $1$&nbsp;người dùng $2$&nbsp;chiếc đũa ($1$&nbsp;đôi). Có $6$&nbsp;người thì lấy $2 \\times 6$.", solution: "<li><span class='font-bold text-blue-700'>Tóm tắt:</span><br>Gia đình: $6$&nbsp;người<br>Mỗi người: $2$&nbsp;chiếc đũa<br>Sắp ra bàn: $\\dots$&nbsp;chiếc đũa?</li><li><span class='font-bold text-blue-700'>Bài giải:</span><br>Mai cần sắp ra bàn số chiếc đũa là:<br>$2 \\times 6 = 12$&nbsp;(chiếc)</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $12$&nbsp;chiếc đũa.</li>" }
+]
+});
+</script>
+<!-- ==================== ĐỀ KIỂM TRA KHẢO SÁT MÔN TOÁN LỚP 2 - ĐỀ 4 ==================== -->
+<script>
+window.EXAM_DATA = window.EXAM_DATA || [];
+window.EXAM_DATA.push({
+id: 30, title: "ĐỀ KIỂM TRA KHẢO SÁT MÔN TOÁN LỚP 2 - ĐỀ 4", icon: "📑", color: "indigo", level: "Cơ bản & Nâng cao", time: "40 phút",
+trac_nghiem: [
+{ q_title: "Câu 1", q_content: "Số $95$&nbsp;đọc là:", options: ["A. Chín mươi năm", "B. Chín lăm", "C. Chín mươi lăm", "D. Chín mươi nhăm"], correct_idx: 2, explain: "Chữ số $9$&nbsp;ở hàng chục đọc là 'chín mươi', chữ số $5$&nbsp;ở hàng đơn vị (đứng sau mươi) đọc là 'lăm'. Đọc chuẩn là: Chín mươi lăm." },
+{ q_title: "Câu 2", q_content: "$48 + 12 - 20 = \\dots$ Số cần điền vào chỗ chấm là:", options: ["A. $26$", "B. $70$", "C. $38$", "D. $40$"], correct_idx: 3, explain: "Thực hiện phép tính từ trái sang phải: $48 + 12 = 60$. Sau đó lấy $60 - 20 = 40$." },
+{ q_title: "Câu 3", q_content: "Tính: $100 - 45 + 13 = ?$", options: ["A. $32$", "B. $58$", "C. $68$", "D. $86$"], correct_idx: 2, explain: "Thực hiện phép tính từ trái sang phải: $100 - 45 = 55$. Sau đó lấy $55 + 13 = 68$." },
+{ q_title: "Câu 4", q_content: "$100\\text{cm} = \\dots\\text{dm}$. Số cần điền vào chỗ chấm là:", options: ["A. $1$", "B. $10$", "C. $100$", "D. $20$"], correct_idx: 1, explain: "Ghi nhớ bảng đơn vị đo: $10\\text{cm} = 1\\text{dm}$. Do đó $100\\text{cm} = 10\\text{dm}$." },
+{ q_title: "Câu 5", q_content: "Đoạn thẳng AC dài là:<br><svg width='300' height='80' viewBox='0 0 300 80' class='mx-auto my-4'><line x1='30' y1='40' x2='270' y2='40' stroke='#1f2937' stroke-width='2.5'/><line x1='30' y1='30' x2='30' y2='50' stroke='#1f2937' stroke-width='2.5'/><line x1='180' y1='30' x2='180' y2='50' stroke='#1f2937' stroke-width='2.5'/><line x1='270' y1='30' x2='270' y2='50' stroke='#1f2937' stroke-width='2.5'/><text x='30' y='70' font-size='18' font-weight='bold' text-anchor='middle'>A</text><text x='180' y='70' font-size='18' font-weight='bold' text-anchor='middle'>B</text><text x='270' y='70' font-size='18' font-weight='bold' text-anchor='middle'>C</text><text x='105' y='25' font-size='16' text-anchor='middle'>48cm</text><text x='225' y='25' font-size='16' text-anchor='middle'>26cm</text></svg>", options: ["A. $64\\text{cm}$", "B. $74\\text{cm}$", "C. $84\\text{cm}$", "D. $94\\text{cm}$"], correct_idx: 1, explain: "Độ dài đoạn thẳng AC bằng tổng độ dài hai đoạn thẳng AB và BC. Ta có: $48 + 26 = 74\\text{ (cm)}$." },
+{ q_title: "Câu 6", q_content: "Hình tứ giác có:", options: ["A. $3$&nbsp;cạnh", "B. $4$&nbsp;cạnh", "C. $5$&nbsp;cạnh", "D. $6$&nbsp;cạnh"], correct_idx: 1, explain: "Tứ giác là hình có $4$&nbsp;cạnh và $4$&nbsp;góc." },
+{ q_title: "Câu 7", q_content: "Hiệu là số lớn nhất có một chữ số, số trừ là $24$, số bị trừ là:", options: ["A. $15$", "B. $33$", "C. $38$", "D. $48$"], correct_idx: 1, explain: "Số lớn nhất có một chữ số là $9$ (vậy Hiệu là $9$). Muốn tìm số bị trừ, ta lấy Hiệu cộng với số trừ: $9 + 24 = 33$." },
+{ q_title: "Câu 8", q_content: "Trong phép trừ: $56 - 23 = 33$, số $56$&nbsp;gọi là:", options: ["A. Số hạng", "B. Hiệu", "C. Số bị trừ", "D. Số trừ"], correct_idx: 2, explain: "Trong phép tính trừ, số đứng trước dấu trừ gọi là Số bị trừ, số đứng sau dấu trừ là Số trừ, kết quả là Hiệu." },
+{ q_title: "Câu 9", q_content: "Một ngày có mấy giờ?", options: ["A. $10$&nbsp;giờ", "B. $12$&nbsp;giờ", "C. $24$&nbsp;giờ", "D. $14$&nbsp;giờ"], correct_idx: 2, explain: "Một ngày có đúng $24$&nbsp;giờ (bắt đầu từ $12$&nbsp;giờ đêm hôm trước đến $12$&nbsp;giờ đêm hôm sau)." },
+{ q_title: "Câu 10", q_content: "Tổng của số lớn nhất có một chữ số với $37$&nbsp;là:", options: ["A. $36$", "B. $56$", "C. $46$", "D. $26$"], correct_idx: 2, explain: "Số lớn nhất có một chữ số là $9$. Tổng là phép tính cộng: $9 + 37 = 46$." },
+{ q_title: "Câu 11", q_content: "Kết quả của phép tính: $\\dots + 8 = 40$. Số cần điền vào chỗ chấm là:", options: ["A. $48$", "B. $42$", "C. $32$", "D. $58$"], correct_idx: 2, explain: "Cần tìm số hạng chưa biết: Ta lấy tổng trừ đi số hạng đã biết: $40 - 8 = 32$." },
+{ q_title: "Câu 12", q_content: "Phép trừ nào dưới đây có kết quả là $25$?", options: ["A. $72 - 47$", "B. $72 - 48$", "C. $92 - 77$", "D. $92 - 68$"], correct_idx: 0, explain: "Thực hiện phép trừ ở từng đáp án: $72 - 47 = 25$. Vậy đáp án A đúng." },
+{ q_title: "Câu 13", q_content: "Hiệu của $84$&nbsp;và $8$&nbsp;là:", options: ["A. $86$", "B. $76$", "C. $92$", "D. $74$"], correct_idx: 1, explain: "Hiệu là phép tính trừ. Ta lấy $84 - 8 = 76$." },
+{ q_title: "Câu 14", q_content: "Hiệu của số lớn nhất có hai chữ số với $87$&nbsp;là:", options: ["A. $22$", "B. $12$", "C. $32$", "D. $10$"], correct_idx: 1, explain: "Số lớn nhất có hai chữ số là $99$. Hiệu là: $99 - 87 = 12$." },
+{ q_title: "Câu 15", q_content: "Kim ngắn chỉ số $8$, kim dài chỉ số $12$. Đồng hồ chỉ:", options: ["A. $8$&nbsp;giờ", "B. $12$&nbsp;giờ", "C. $21$&nbsp;giờ", "D. $20$&nbsp;giờ"], correct_idx: 0, explain: "Kim dài chỉ đúng số $12$&nbsp;nghĩa là giờ đúng. Kim ngắn chỉ số $8$&nbsp;nghĩa là $8$&nbsp;giờ đúng." },
+{ q_title: "Câu 16", q_content: "Trong hình vẽ bên có:<br><svg width='240' height='120' viewBox='0 0 240 120' class='mx-auto my-4'><polygon points='20,20 20,100 220,100 160,20' fill='none' stroke='#1f2937' stroke-width='2.5' stroke-linejoin='round'/><line x1='20' y1='20' x2='90' y2='100' stroke='#1f2937' stroke-width='2.5'/><line x1='160' y1='20' x2='90' y2='100' stroke='#1f2937' stroke-width='2.5'/></svg>", options: ["A. $3$&nbsp;hình tứ giác", "B. $2$&nbsp;hình tứ giác", "C. $4$&nbsp;hình tứ giác", "D. $5$&nbsp;hình tứ giác"], correct_idx: 0, explain: "Các hình tứ giác đếm được gồm:<br>- 1 hình tứ giác ghép bởi 2 tam giác bên trái.<br>- 1 hình tứ giác ghép bởi 2 tam giác bên phải.<br>- 1 hình tứ giác (hình thang) lớn nhất bao ngoài toàn bộ.<br>Tổng cộng có 3 hình tứ giác." }
+],
+tu_luan: [
+{ t_title: "Bài 1", t_content: "Đặt tính rồi tính:<br>a) $32 + 19$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b) $71 - 54$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c) $29 + 9$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; d) $63 - 5$", strategy: "Viết số hạng/số trừ thẳng cột. Thực hiện từ phải sang trái. Chú ý các phép tính có nhớ/có mượn.", solution: "<li><span class='font-bold text-blue-700'>Bài giải:</span><br><strong>Đặt tính rồi tính:</strong></li><div class='flex flex-wrap gap-8 justify-around my-4 text-lg'><div>$$\\begin{array}{rr} & 32 \\\\ + & 19 \\\\ \\hline & \\mathbf{\\color{red}{51}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 71 \\\\ - & 54 \\\\ \\hline & \\mathbf{\\color{red}{17}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 29 \\\\ + & 9 \\\\ \\hline & \\mathbf{\\color{red}{38}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 63 \\\\ - & 5 \\\\ \\hline & \\mathbf{\\color{red}{58}} \\end{array}$$</div></div><li class='font-bold mt-2 text-indigo-700'>Đáp số: Đã tính ở trên.</li>" },
+{ t_title: "Bài 2", t_content: "Tính:<br>a) $90 - 55 + 45$<br>b) $211 + 49 - 90$<br>c) $28 + 34 + 100$<br>d) $164 + 92 - 25$", strategy: "Biểu thức chỉ có cộng trừ thì thực hiện lần lượt từ trái sang phải.", solution: "<li><span class='font-bold text-blue-700'>Bài giải:</span></li><li>a) $90 - 55 + 45 = 35 + 45 = 80$</li><li>b) $211 + 49 - 90 = 260 - 90 = 170$</li><li>c) $28 + 34 + 100 = 62 + 100 = 162$</li><li>d) $164 + 92 - 25 = 256 - 25 = 231$</li>" },
+{ t_title: "Bài 3", t_content: "Khối lớp 2 có $94$&nbsp;học sinh. Khối lớp 3 có ít hơn khối lớp Hai $16$&nbsp;học sinh. Hỏi khối lớp 3 có bao nhiêu học sinh?", strategy: "Đề bài cho dữ kiện 'ít hơn', ta dùng phép tính trừ.", solution: "<li><span class='font-bold text-blue-700'>Tóm tắt:</span><br>Khối 2: $94$&nbsp;học sinh<br>Khối 3 ít hơn: $16$&nbsp;học sinh<br>Khối 3: $\\dots$&nbsp;học sinh?</li><li><span class='font-bold text-blue-700'>Bài giải:</span><br>Khối lớp 3 có số học sinh là:<br>$94 - 16 = 78$&nbsp;(học sinh)</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $78$&nbsp;học sinh.</li>" },
+{ t_title: "Bài 4", t_content: "Một cửa hàng buổi sáng bán được $42\\text{ l}$ dầu và bán nhiều hơn buổi chiều $7$&nbsp;lít dầu. Hỏi buổi chiều cửa hàng đó bán được bao nhiêu lít dầu?", strategy: "<strong>Bẫy câu chữ:</strong> Sáng bán 'nhiều hơn' chiều, điều đó có nghĩa là chiều bán 'ít hơn' sáng. Để tìm số dầu buổi chiều, ta phải dùng phép tính trừ.", solution: "<li><span class='font-bold text-blue-700'>Tóm tắt:</span><br>Sáng bán: $42$&nbsp;lít<br>Sáng nhiều hơn chiều: $7$&nbsp;lít<br>Chiều bán: $\\dots$&nbsp;lít?</li><li><span class='font-bold text-blue-700'>Bài giải:</span><br>Buổi chiều cửa hàng đó bán được số lít dầu là:<br>$42 - 7 = 35$&nbsp;(lít)</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $35$&nbsp;lít dầu.</li>" },
+{ t_title: "Bài 5", t_content: "Tính hiệu, biết số bị trừ là số lớn nhất có hai chữ số và số trừ là số bé nhất có hai chữ số.", strategy: "Cần giải mã các con số giấu kín trước khi làm phép trừ. Số lớn nhất có 2 chữ số là 99. Số bé nhất có 2 chữ số là 10.", solution: "<li><span class='font-bold text-blue-700'>Bài giải:</span><br>Số lớn nhất có hai chữ số (Số bị trừ) là: $99$.</li><li>Số bé nhất có hai chữ số (Số trừ) là: $10$.</li><li>Hiệu của hai số đó là:<br>$99 - 10 = 89$</li><li class='font-bold mt-2 text-indigo-700'>Đáp số: $89$.</li>" }
 ]
 });
 </script>
