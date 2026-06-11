@@ -309,28 +309,23 @@ exam.tu_luan.forEach((t, index) => {
 let totalLines = 4;
 if (t.solution) {
 // BƯỚC 1: XÁC ĐỊNH VỊ TRÍ BẮT ĐẦU ĐẾM DÒNG
-let countString = t.solution;
+let countString = t.solution || "";
+let startIndex = 0;
 const ttIndex = countString.search(/Tóm tắt/i);
 if (ttIndex !== -1) {
-// Tìm thẻ <li... trước chữ Tóm tắt để không bị đếm hụt
-const liIndex = countString.lastIndexOf("<li", ttIndex);
-if (liIndex !== -1) countString = countString.substring(liIndex);
-else countString = countString.substring(ttIndex);
+startIndex = ttIndex;
 } else {
-// Tìm thẻ <li... trước chữ Bài giải để không bị đếm hụt
 const bgIndex = countString.search(/Bài giải/i);
-if (bgIndex !== -1) {
-const liIndex = countString.lastIndexOf("<li", bgIndex);
-if (liIndex !== -1) countString = countString.substring(liIndex);
-else countString = countString.substring(bgIndex);
+if (bgIndex !== -1) startIndex = bgIndex;
 }
-}
-// BƯỚC 2: ĐẾM SỐ DÒNG THỰC TẾ
-const listItemsCount = (countString.match(/<li[^>]*>/gi) || []).length;
-const brCount = (countString.match(/<br[^>]*>/gi) || []).length;
-let actualLines = listItemsCount + brCount;
-if (actualLines === 0) actualLines = 3;
-// Khớp 100% với số dòng thực tế, không cộng thêm dòng thừa nào nữa
+countString = countString.substring(startIndex);
+// BƯỚC 2: ĐẾM SỐ DÒNG THỰC TẾ (CẬP NHẬT THUẬT TOÁN CHUẨN)
+// Nhận diện toàn bộ các thẻ kết thúc block hoặc ngắt dòng
+const lineBreaks = (countString.match(/<br[^>]*>|<\/div>|<\/li>|<\/p>/gi) || []).length;
+// Bù thêm 3 dòng không gian nếu phát hiện có phép đặt tính dọc
+const mathPadding = /\\begin\{array\}/i.test(countString) ? 3 : 0;
+let actualLines = lineBreaks + mathPadding + 1; // +1 làm dòng đệm
+if (actualLines < 4) actualLines = 4; // Tối thiểu 4 dòng
 totalLines = actualLines;
 }
 if (t.lines_needed) {
