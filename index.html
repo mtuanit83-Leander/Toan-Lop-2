@@ -33,13 +33,20 @@ background-color: #fef2f2 !important;
 border-color: #ef4444 !important;
 color: #b91c1c !important;
 }
+.hint-content { display: none; }
+.show-hints .hint-content { display: block; }
 .testing-mode .option-btn:hover {
 background-color: #e0e7ff !important;
 }
 .option-btn { line-height: 1.6; }
 /* KHU VỰC VỞ Ô LY CHO TỰ LUẬN */
 .student-workspace { display: none; margin-top: 1.5rem; }
-.testing-mode .student-workspace { display: block; }
+.testing-mode .student-workspace,
+.show-answers .student-workspace,
+.show-hints .student-workspace { display: block; }
+/* Ẩn lưới ô ly khi xem đáp án hoặc hướng dẫn */
+.show-answers .empty-workspace,
+.show-hints .empty-workspace { display: none !important; }
 .oly-bg {
 background-color: #fff;
 position: relative;
@@ -162,6 +169,7 @@ Hệ thống đang tải dữ liệu...
 </label>
 <button id="testingModeBtn" onclick="toggleTestingMode()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold shadow transition-colors border border-purple-500">✍️ Làm Bài</button>
 <button onclick="triggerPrint()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-bold shadow transition-colors border border-gray-500">🖨️ In Đề</button>
+<button id="toggleHintsBtn" onclick="toggleHints()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold shadow transition-colors border border-yellow-400">💡 Hướng Dẫn</button>
 <button id="toggleAnswersBtn" onclick="toggleAnswers()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow transition-colors border border-blue-500">👁️ Xem Đáp Án</button>
 </div>
 </div>
@@ -331,17 +339,29 @@ totalLines = actualLines;
 if (t.lines_needed) {
 totalLines = t.lines_needed;
 }
+// Tính chiều cao tối thiểu cho khung trắng (dành cho chế độ in/làm bài)
 const lineSize = 40;
 const workspaceHeight = totalLines * lineSize;
 const vectorGridHTML = generateVectorGrid(workspaceHeight);
-// Giao diện tự luận: Luôn gộp chung thành 1 CỘT TRẢI DÀI 100%
+// Giao diện tự luận mới: Khôi phục vở ô ly khi Làm bài/In đề, ẩn đi khi Xem đáp án
 let workspaceHTML = `
-<div class="flex flex-col h-full w-full">
-<!-- Cột Bài giải (Trải dài 100%) -->
-<div class="w-full flex flex-col flex-grow">
-<p class="font-bold text-indigo-600 mb-2">✍️ Bài làm:</p>
-<div class="oly-bg shadow-sm" style="min-height: ${workspaceHeight}px;">
+<div class="flex flex-col w-full gap-4 mt-2">
+<!-- Vùng để học sinh làm bài: Có lưới ô ly (ẩn khi xem đáp án) -->
+<div class="empty-workspace oly-bg shadow-sm relative overflow-hidden" style="min-height: ${workspaceHeight}px;">
+<!-- Lề đỏ -->
+<div class="absolute top-0 left-0 w-12 md:w-16 h-full border-r-2 border-red-300 bg-red-50/10 z-0"></div>
 ${vectorGridHTML}
+</div>
+<!-- Chiến thuật (Chỉ hiện khi bấm Hướng Dẫn) -->
+<div class="hint-content bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg shadow-sm">
+<div class="font-bold text-yellow-800 mb-2 flex items-center gap-2">💡 CHIẾN THUẬT TƯ DUY:</div>
+<div class="text-gray-700 text-sm md:text-base">${t.strategy}</div>
+</div>
+<!-- Nội dung giải (Hiện khi bấm Xem Đáp Án) -->
+<div class="answer-explanation bg-green-50 border border-green-200 p-5 rounded-xl shadow-sm">
+<div class="font-bold text-green-800 mb-3 flex items-center gap-2">📝 TRÌNH BÀY LỜI GIẢI:</div>
+<div class="text-blue-900 text-lg md:text-xl font-medium leading-[2.2] tracking-wide w-full">
+${t.solution}
 </div>
 </div>
 </div>`;
@@ -355,11 +375,6 @@ htmlStr += `
 <div class="student-workspace">
 ${workspaceHTML}
 </div>
-<!-- Lời giải chi tiết -->
-<div class="answer-explanation mt-4 bg-green-50 p-5 rounded-xl border border-green-200">
-<div class="font-bold text-green-800 mb-2">🎯 CHIẾN THUẬT TƯ DUY:</div><p class="text-green-700 text-sm mb-4">${t.strategy}</p>
-<div class="font-bold text-green-800 mb-2">📝 TRÌNH BÀY LỜI GIẢI:</div><ul class="list-none space-y-2 text-gray-800">${t.solution}</ul>
-</div>
 </div>`;
 });
 } else {
@@ -367,10 +382,11 @@ htmlStr += `<h3 class="text-2xl font-bold text-indigo-700 border-b-2 border-indi
 }
 document.getElementById('exam-dynamic-content').innerHTML = htmlStr;
 // Khôi phục trạng thái
-document.body.classList.remove('show-answers', 'testing-mode', 'print-full-page');
+document.body.classList.remove('show-answers', 'show-hints', 'testing-mode', 'print-full-page');
 const printToggleCb = document.getElementById('fillPageToggle');
 if (printToggleCb) printToggleCb.checked = false;
 resetAnswerBtn();
+resetHintsBtn();
 resetTestingBtn();
 document.getElementById('menu-view').classList.add('hidden');
 document.getElementById('exam-view').classList.remove('hidden');
@@ -404,6 +420,9 @@ btn.classList.replace('hover:bg-purple-700', 'hover:bg-orange-700');
 if(printToggle) printToggle.classList.remove('hidden'); // Hiện checkbox lấp đầy
 if (body.classList.contains('show-answers')) {
 toggleAnswers();
+}
+if (body.classList.contains('show-hints')) {
+toggleHints();
 }
 }
 }
@@ -440,6 +459,28 @@ if(btn) {
 btn.innerHTML = '👁️ Xem Đáp Án';
 btn.classList.remove('bg-green-600', 'hover:bg-green-700');
 btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+}
+}
+function toggleHints() {
+const body = document.body;
+const btn = document.getElementById('toggleHintsBtn');
+if (body.classList.contains('show-hints')) {
+body.classList.remove('show-hints');
+resetHintsBtn();
+} else {
+body.classList.add('show-hints');
+btn.innerHTML = '🙈 Ẩn Hướng Dẫn';
+btn.classList.replace('bg-yellow-500', 'bg-orange-500');
+btn.classList.replace('hover:bg-yellow-600', 'hover:bg-orange-600');
+btn.classList.replace('border-yellow-400', 'border-orange-400');
+}
+}
+function resetHintsBtn() {
+const btn = document.getElementById('toggleHintsBtn');
+if(btn) {
+btn.innerHTML = '💡 Hướng Dẫn';
+btn.classList.remove('bg-orange-500', 'hover:bg-orange-600', 'border-orange-400');
+btn.classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'border-yellow-400');
 }
 }
 function triggerPrint() {
@@ -2027,6 +2068,60 @@ tu_luan: [
 { t_title: "Bài 4", t_content: "Mai có $45$&nbsp;viên kẹo. Mai cho em $5$&nbsp;viên kẹo. Số kẹo còn lại Mai đem chia đều vào $5$&nbsp;chiếc hộp. Hỏi mỗi hộp có bao nhiêu viên kẹo?", strategy: "Bài toán giải bằng $2$&nbsp;bước tính. Bước 1: Tính số kẹo còn lại của Mai (phép trừ). Bước 2: Chia đều số kẹo còn lại vào 5 hộp (phép chia).", solution: "<div><span class='font-bold text-blue-700'>Tóm tắt:</span></div><div>Mai có: $45$&nbsp;viên kẹo</div><div>Cho em: $5$&nbsp;viên kẹo</div><div>Còn lại chia đều: $5$&nbsp;hộp</div><div>Mỗi hộp: $\\dots$&nbsp;viên kẹo?</div><br><div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Sau khi cho em, Mai còn lại số viên kẹo là:</div><div>$45 - 5 = 40$&nbsp;(viên)</div><div>Mỗi hộp có số viên kẹo là:</div><div>$40 : 5 = 8$&nbsp;(viên)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $8$&nbsp;viên kẹo.</span></div>" },
 { t_title: "Bài 5", t_content: "Một mảnh vườn hình tam giác có $3$&nbsp;cạnh bằng nhau, mỗi cạnh dài $5\\text{ m}$. Bác nông dân muốn dùng lưới rào xung quanh mảnh vườn đó $2$&nbsp;vòng. Hỏi bác cần bao nhiêu mét lưới?", strategy: "Độ dài 1 vòng rào lưới chính là Chu vi của mảnh vườn. Phải tính chu vi trước rồi nhân đôi (hoặc cộng thêm 1 lần nữa) để ra số mét lưới rào 2 vòng.", solution: "<div><span class='font-bold text-blue-700'>Tóm tắt:</span></div><div>Mảnh vườn tam giác có: $3$&nbsp;cạnh bằng nhau</div><div>Mỗi cạnh: $5\\text{ m}$</div><div>Rào lưới: $2$&nbsp;vòng</div><div>Cần: $\\dots\\text{ m}$ lưới?</div><br><div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Chu vi của mảnh vườn hình tam giác (hay độ dài 1 vòng lưới) là:</div><div>$5 + 5 + 5 = 15$&nbsp;(m)</div><div>Để rào $2$&nbsp;vòng, bác nông dân cần số mét lưới là:</div><div>$15 + 15 = 30$&nbsp;(m)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $30\\text{ m}$ lưới.</span></div>" },
 { t_title: "Bài 6", t_content: "Tổng của hai số là $150$. Nếu tăng số hạng thứ nhất thêm $20$&nbsp;đơn vị và giảm số hạng thứ hai đi $35$&nbsp;đơn vị thì tổng mới sẽ là bao nhiêu?", strategy: "Sự thay đổi của Tổng: Khi số hạng tăng thì tổng tăng, khi số hạng giảm thì tổng giảm. Cứ tuần tự cộng/trừ số đơn vị đề cho trên cái tổng ban đầu.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Khi tăng số hạng thứ nhất thêm $20$&nbsp;đơn vị thì tổng sẽ tăng thêm $20$. Khi giảm số hạng thứ hai đi $35$&nbsp;đơn vị thì tổng sẽ giảm đi $35$.</div><div>Tổng mới của hai số sẽ là:</div><div>$150 + 20 - 35 = 135$</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $135$.</span></div>" }
+]
+});
+</script>
+<!-- ==================== ĐỀ KIỂM TRA TỔNG ÔN LÊN LỚP 3 - ĐỀ SỐ 63 & 64 ==================== -->
+<script>
+window.EXAM_DATA = window.EXAM_DATA || [];
+window.EXAM_DATA.push({
+id: 63, title: "ĐỀ TỔNG ÔN LÊN LỚP 3 - ĐỀ SỐ 63 (HSG Cấp Quận)", icon: "🏆", color: "red", level: "HSG Cấp Quận", time: "45 phút",
+trac_nghiem: [
+{ q_title: "Câu 1", q_content: "Số lẻ lớn nhất có ba chữ số khác nhau mà tích các chữ số bằng $24$&nbsp;là:", options: ["A. $831$", "B. $641$", "C. $423$", "D. $813$"], correct_idx: 0, explain: "Phân tích $24$ thành tích 3 chữ số khác nhau: (1, 3, 8), (1, 4, 6), (2, 3, 4). Để lập số LỚN NHẤT, chọn hàng trăm lớn nhất có thể là $8$. Từ bộ (1, 3, 8) ghép được $831$ và $813$. Số lớn hơn là $831$. Vì tận cùng là $1$ nên đây là số lẻ (thỏa mãn)." },
+{ q_title: "Câu 2", q_content: "Điền số thích hợp vào chỗ chấm: $1\\text{ km} - 450\\text{ m} = \\dots\\text{ m}$", options: ["A. $650$", "B. $550$", "C. $1450$", "D. $450$"], correct_idx: 1, explain: "Đổi $1\\text{ km} = 1000\\text{ m}$. Thực hiện phép trừ: $1000 - 450 = 550\\text{ (m)}$." },
+{ q_title: "Câu 3", q_content: "Hình nào dưới đây đã tô màu $\\frac{1}{5}$ số ngôi sao?", options: ["<div class='flex items-center gap-2'>A. <svg width='100' height='30' viewBox='0 0 100 30'><text x='5' y='22' font-size='20' fill='#fbbf24'>⭐</text><text x='25' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='45' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='65' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='85' y='22' font-size='20' fill='#d1d5db'>⭐</text></svg></div>", "<div class='flex items-center gap-2'>B. <svg width='100' height='30' viewBox='0 0 100 30'><text x='5' y='22' font-size='20' fill='#fbbf24'>⭐</text><text x='25' y='22' font-size='20' fill='#fbbf24'>⭐</text><text x='45' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='65' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='85' y='22' font-size='20' fill='#d1d5db'>⭐</text></svg></div>", "<div class='flex items-center gap-2'>C. <svg width='100' height='30' viewBox='0 0 100 30'><text x='5' y='22' font-size='20' fill='#fbbf24'>⭐</text><text x='25' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='45' y='22' font-size='20' fill='#d1d5db'>⭐</text><text x='65' y='22' font-size='20' fill='#d1d5db'>⭐</text></svg></div>", "D. Không có hình nào"], correct_idx: 0, explain: "Tìm $\\frac{1}{5}$ của một nhóm nghĩa là chia nhóm đó thành 5 phần bằng nhau. Ở hình A, có tổng cộng 5 ngôi sao, tô màu 1 ngôi sao (tức là 1 phần 5)." },
+{ q_title: "Câu 4", q_content: "Đồng hồ đang chỉ mấy giờ?<br><svg width='120' height='120' viewBox='0 0 100 100' class='mx-auto my-4'><circle cx='50' cy='50' r='45' fill='white' stroke='#1f2937' stroke-width='3'/><circle cx='50' cy='50' r='3' fill='#1f2937'/><line x1='50' y1='50' x2='29' y2='21' stroke='#1f2937' stroke-width='4' stroke-linecap='round'/><line x1='50' y1='50' x2='85' y2='50' stroke='#ef4444' stroke-width='2' stroke-linecap='round'/><text x='50' y='18' text-anchor='middle' font-size='10' font-weight='bold'>12</text><text x='85' y='53' text-anchor='middle' font-size='10' font-weight='bold'>3</text><text x='50' y='90' text-anchor='middle' font-size='10' font-weight='bold'>6</text><text x='15' y='53' text-anchor='middle' font-size='10' font-weight='bold'>9</text><text x='25' y='25' text-anchor='middle' font-size='10' font-weight='bold'>10</text><text x='35' y='17' text-anchor='middle' font-size='10' font-weight='bold'>11</text></svg>", options: ["A. $10$&nbsp;giờ $15$&nbsp;phút", "B. $11$&nbsp;giờ $15$&nbsp;phút", "C. $10$&nbsp;giờ $3$&nbsp;phút", "D. $11$&nbsp;giờ $3$&nbsp;phút"], correct_idx: 1, explain: "Kim ngắn màu đen đã nhích qua khỏi số 11 một chút $\\Rightarrow 11$&nbsp;giờ. Kim dài màu đỏ chỉ thẳng vào số 3 $\\Rightarrow 15$&nbsp;phút. Đồng hồ chỉ $11$&nbsp;giờ $15$&nbsp;phút." },
+{ q_title: "Câu 5", q_content: "Hùng có $1$&nbsp;tờ $50 000$&nbsp;đồng. Hùng mua một chiếc bút mực giá $12 000$&nbsp;đồng và một quyển vở giá $8 000$&nbsp;đồng. Cô bán hàng thối lại cho Hùng đúng $2$&nbsp;tờ tiền. Hỏi đó là những tờ tiền nào?", options: ["A. $2$&nbsp;tờ $10 000$&nbsp;đồng", "B. $1$&nbsp;tờ $20 000$&nbsp;đồng và $1$&nbsp;tờ $10 000$&nbsp;đồng", "C. $2$&nbsp;tờ $20 000$&nbsp;đồng", "D. $1$&nbsp;tờ $10 000$&nbsp;đồng và $1$&nbsp;tờ $5 000$&nbsp;đồng"], correct_idx: 1, explain: "Tổng tiền Hùng mua đồ là: $12 000 + 8 000 = 20 000$&nbsp;(đồng). Cô bán hàng thối lại số tiền là: $50 000 - 20 000 = 30 000$&nbsp;(đồng). Để trả $30 000$&nbsp;đồng bằng $2$&nbsp;tờ tiền, cô sẽ dùng $1$&nbsp;tờ $20 000$&nbsp;đồng và $1$&nbsp;tờ $10 000$&nbsp;đồng." },
+{ q_title: "Câu 6", q_content: "Hình bên được xếp từ bao nhiêu khối lập phương nhỏ?<br><svg width='150' height='150' viewBox='0 0 100 100' class='mx-auto my-4'><polygon points='40,45 50,40 40,35 30,40' fill='#fca5a5' stroke='#b91c1c' stroke-linejoin='round'/><polygon points='30,40 40,45 40,75 30,70' fill='#ef4444' stroke='#b91c1c' stroke-linejoin='round'/><polygon points='40,45 50,40 50,70 40,75' fill='#dc2626' stroke='#b91c1c' stroke-linejoin='round'/><polygon points='20,60 30,55 20,50 10,55' fill='#93c5fd' stroke='#2563eb' stroke-linejoin='round'/><polygon points='10,55 20,60 20,80 10,75' fill='#3b82f6' stroke='#2563eb' stroke-linejoin='round'/><polygon points='20,60 30,55 30,75 20,70' fill='#1d4ed8' stroke='#2563eb' stroke-linejoin='round'/><polygon points='60,60 70,55 60,50 50,55' fill='#fde047' stroke='#ca8a04' stroke-linejoin='round'/><polygon points='50,55 60,60 60,80 50,75' fill='#eab308' stroke='#ca8a04' stroke-linejoin='round'/><polygon points='60,60 70,55 70,75 60,70' fill='#ca8a04' stroke='#ca8a04' stroke-linejoin='round'/></svg>", options: ["A. $4$&nbsp;khối", "B. $5$&nbsp;khối", "C. $6$&nbsp;khối", "D. $7$&nbsp;khối"], correct_idx: 2, explain: "Đếm theo cột đứng: Cột ở giữa (màu đỏ) cao 3 tầng $\\Rightarrow$ Có 3 khối (1 lộ, 2 khuất). Cột bên trái (màu xanh) cao 2 tầng $\\Rightarrow$ Có 2 khối (1 lộ, 1 khuất). Cột bên phải (màu vàng) cao 1 tầng $\\Rightarrow$ Có 1 khối. Tổng: $3 + 2 + 1 = 6$&nbsp;khối." },
+{ q_title: "Câu 7", q_content: "Tháng $5$&nbsp;có $31$&nbsp;ngày. Nếu ngày $28$&nbsp;tháng $5$&nbsp;là Chủ Nhật, thì ngày mùng $1$&nbsp;tháng $6$&nbsp;(Quốc tế Thiếu nhi) cùng năm đó là thứ mấy?", options: ["A. Thứ Ba", "B. Thứ Tư", "C. Thứ Năm", "D. Thứ Sáu"], correct_idx: 2, explain: "Đếm tiếp các ngày: Ngày $28/5$ là Chủ Nhật. Ngày $29/5$ (Thứ Hai), ngày $30/5$ (Thứ Ba), ngày $31/5$ (Thứ Tư). Vì tháng $5$ có $31$ ngày nên ngày tiếp theo là mùng $1/6$ sẽ rơi vào Thứ Năm." },
+{ q_title: "Câu 8", q_content: "Trong hộp có $5$&nbsp;bi đỏ, $4$&nbsp;bi vàng và $2$&nbsp;bi xanh. Không nhìn vào hộp, lấy ra ít nhất bao nhiêu viên bi để <strong>chắc chắn</strong> có $1$&nbsp;viên bi màu xanh?", options: ["A. $3$&nbsp;viên", "B. $9$&nbsp;viên", "C. $10$&nbsp;viên", "D. $11$&nbsp;viên"], correct_idx: 2, explain: "Trường hợp xui xẻo nhất: Bốc toàn bộ bi đỏ ($5$&nbsp;viên) và toàn bộ bi vàng ($4$&nbsp;viên). Lúc này ta đã lấy $9$&nbsp;viên nhưng vẫn KHÔNG CÓ bi xanh nào. Viên thứ $10$&nbsp;bắt buộc phải là bi xanh. Cần bốc ít nhất $10$&nbsp;viên." },
+{ q_title: "Câu 9", q_content: "Năm nay tổng số tuổi của mẹ và con là $40$&nbsp;tuổi. Mẹ hơn con $26$&nbsp;tuổi. Hỏi $4$&nbsp;năm nữa mẹ hơn con bao nhiêu tuổi?", options: ["A. $30$&nbsp;tuổi", "B. $26$&nbsp;tuổi", "C. $34$&nbsp;tuổi", "D. $22$&nbsp;tuổi"], correct_idx: 1, explain: "Bẫy logic tuổi tác: Dữ kiện 'tổng số tuổi' là dữ kiện gây nhiễu. Nguyên tắc cốt lõi: Hiệu số tuổi của hai người KHÔNG BAO GIỜ thay đổi theo thời gian. Hiện nay mẹ hơn con $26$&nbsp;tuổi thì $4$&nbsp;năm nữa mẹ vẫn hơn con $26$&nbsp;tuổi." },
+{ q_title: "Câu 10", q_content: "Cho dãy số: $1, 2, 4, 7, 11, \\dots$&nbsp;Số thích hợp điền vào chỗ chấm là:", options: ["A. $15$", "B. $16$", "C. $17$", "D. $18$"], correct_idx: 1, explain: "Khoảng cách giữa các số tăng dần: $+1, +2, +3, +4$. Số tiếp theo phải cộng thêm $5$, ta có: $11 + 5 = 16$." },
+{ q_title: "Câu 11", q_content: "Trong một phép trừ, nếu ta giữ nguyên số trừ và tăng số bị trừ thêm $15$&nbsp;đơn vị thì hiệu mới sẽ thay đổi thế nào?", options: ["A. Hiệu tăng thêm $15$&nbsp;đơn vị", "B. Hiệu giảm đi $15$&nbsp;đơn vị", "C. Hiệu không đổi", "D. Hiệu tăng thêm $30$&nbsp;đơn vị"], correct_idx: 0, explain: "Khi số bị trừ (số đứng trước) lớn lên mà số trừ (số bị cắt đi) giữ nguyên, thì phần còn lại (Hiệu) sẽ lớn lên tương ứng. Vậy Hiệu tăng thêm $15$&nbsp;đơn vị." },
+{ q_title: "Câu 12", q_content: "Trong chuồng có $10$&nbsp;con gồm cả chó và vịt. Đếm được tất cả $26$&nbsp;cái chân. Hỏi trong chuồng có bao nhiêu con vịt?", options: ["A. $3$&nbsp;con", "B. $5$&nbsp;con", "C. $7$&nbsp;con", "D. $8$&nbsp;con"], correct_idx: 2, explain: "Giả sử cả $10$&nbsp;con đều là vịt thì có: $10 \\times 2 = 20$&nbsp;(chân). Hụt mất $26 - 20 = 6$&nbsp;(chân) so với thực tế. Mỗi con chó nhiều hơn vịt $2$&nbsp;chân. Số chó bù vào là: $6 : 2 = 3$&nbsp;(con chó). Số con vịt là: $10 - 3 = 7$&nbsp;(con vịt)." }
+],
+tu_luan: [
+{ t_title: "Bài 1", t_content: "Đặt tính rồi tính:<br>a) $546 + 287$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b) $1000 - 364$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c) $905 - 128$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; d) $72 + 849$", strategy: "Viết số thẳng cột hàng đơn vị, chục, trăm. Chú ý mượn liên tiếp qua các số 0 ở câu (b) và mượn qua số 0 ở câu (c).", solution: "<div class='flex flex-wrap gap-8 justify-around my-4 text-lg'><div>$$\\begin{array}{rr} & 546 \\\\ + & 287 \\\\ \\hline & \\mathbf{\\color{red}{833}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 1000 \\\\ - & 364 \\\\ \\hline & \\mathbf{\\color{red}{636}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 905 \\\\ - & 128 \\\\ \\hline & \\mathbf{\\color{red}{777}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 72 \\\\ + & 849 \\\\ \\hline & \\mathbf{\\color{red}{921}} \\end{array}$$</div></div>" },
+{ t_title: "Bài 2", t_content: "Tính giá trị của biểu thức sau:<br>$1000 - 35 : 5 + 120$", strategy: "Áp dụng đúng thứ tự ưu tiên: Nhân chia làm trước, cộng trừ làm sau. Sau khi chia xong, thực hiện cộng trừ từ trái sang phải.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>$1000 - 35 : 5 + 120$</div><div>$= 1000 - 7 + 120$</div><div>$= 993 + 120$</div><div>$= 1113$</div>" },
+{ t_title: "Bài 3", t_content: "Điền chữ số thích hợp vào dấu $\\square$ trong phép tính sau:<br><div class='text-2xl text-center my-4'>$\\square 3 - 4\\square = 25$</div>", strategy: "Giải mã từ phải sang trái.<br>Cột đơn vị: $3 - \\square = 5$. Không có số nào trừ ra như vậy, nên phải mượn $1$ chục thành $13 - \\square = 5$. Nhớ phải trả $1$ sang cột chục của số trừ.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Nhẩm theo cột dọc từ phải sang trái:</div><div>- Hàng đơn vị: Không có số tự nhiên nào thỏa mãn $3 - \\dots = 5$, nên ta phải mượn $1$ chục. Ta có $13 - 8 = 5$ (viết $5$ nhớ $1$). Vậy ô vuông ở số trừ điền <strong>$8$</strong>.</div><div>- Hàng chục: Ô vuông thứ nhất trừ đi $4$, rồi <strong>trừ tiếp $1$ (đã mượn)</strong> thì bằng $2$. Tức là $\\square - 5 = 2$. Vậy ô vuông ở số bị trừ điền <strong>$7$</strong>.</div><div>Phép tính hoàn chỉnh là: <strong>$73 - 48 = 25$</strong>.</div>" },
+{ t_title: "Bài 4", t_content: "Bạn An có $120$&nbsp;viên bi. Bạn Bình có ít hơn bạn An $30$&nbsp;viên bi, nhưng lại có nhiều hơn bạn Cường $15$&nbsp;viên bi. Hỏi bạn Cường có bao nhiêu viên bi?", strategy: "Bài toán móc xích 2 bước giải. Bước 1: Tính số bi của Bình (phép trừ). Bước 2: Từ số bi của Bình tính số bi của Cường. Chú ý bẫy chữ: Bình nhiều hơn Cường tức là Cường ít hơn Bình $\\Rightarrow$ dùng phép trừ.", solution: "<div><span class='font-bold text-blue-700'>Tóm tắt:</span></div><div>An: $120$&nbsp;viên</div><div>Bình ít hơn An: $30$&nbsp;viên</div><div>Bình nhiều hơn Cường: $15$&nbsp;viên</div><div>Cường: $\\dots$&nbsp;viên?</div><br><div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Bạn Bình có số viên bi là:</div><div>$120 - 30 = 90$&nbsp;(viên)</div><div>Vì bạn Bình có nhiều hơn bạn Cường $15$&nbsp;viên bi, nên bạn Cường có ít hơn bạn Bình $15$&nbsp;viên bi.</div><div>Bạn Cường có số viên bi là:</div><div>$90 - 15 = 75$&nbsp;(viên)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $75$&nbsp;viên bi.</span></div>" },
+{ t_title: "Bài 5", t_content: "Một khu vườn hình tứ giác có kích thước các cạnh lần lượt là $25\\text{ m}, 15\\text{ m}, 25\\text{ m}, 15\\text{ m}$. Bác Ba muốn làm hàng rào kẽm gai xung quanh khu vườn, bác chừa lại một lối đi (cổng) rộng $2\\text{ m}$. Hỏi chiều dài của hàng rào kẽm gai là bao nhiêu mét?", strategy: "Độ dài hàng rào bao quanh chính là Chu vi của khu vườn. Nhưng vì chừa lại cửa nên độ dài thực tế của hàng rào = Chu vi - Chiều rộng lối đi.", solution: "<div><span class='font-bold text-blue-700'>Tóm tắt:</span></div><div>Các cạnh khu vườn: $25\\text{ m}, 15\\text{ m}, 25\\text{ m}, 15\\text{ m}$</div><div>Chừa cổng: $2\\text{ m}$</div><div>Hàng rào: $\\dots\\text{ m}$?</div><br><div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Chu vi của khu vườn hình tứ giác đó là:</div><div>$25 + 15 + 25 + 15 = 80$&nbsp;(m)</div><div>Vì bác Ba chừa lại lối đi rộng $2\\text{ m}$ nên chiều dài của hàng rào kẽm gai là:</div><div>$80 - 2 = 78$&nbsp;(m)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $78\\text{ m}$.</span></div>" },
+{ t_title: "Bài 6", t_content: "Hiệu của hai số là $40$. Nếu tăng số bị trừ thêm $15$&nbsp;đơn vị và giữ nguyên số trừ thì hiệu mới là bao nhiêu?", strategy: "Bản chất của phép trừ: Khi số bị trừ (phần ban đầu) tăng lên mà số trừ (phần cắt đi) không đổi, thì kết quả (hiệu) cũng sẽ tăng lên một lượng tương ứng.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Trong một phép trừ, khi giữ nguyên số trừ và tăng số bị trừ thêm $15$&nbsp;đơn vị thì hiệu của hai số đó cũng tăng thêm $15$&nbsp;đơn vị.</div><div>Hiệu mới của hai số sẽ là:</div><div>$40 + 15 = 55$</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $55$.</span></div>" }
+]
+});
+window.EXAM_DATA.push({
+id: 64, title: "ĐỀ TỔNG ÔN LÊN LỚP 3 - ĐỀ SỐ 64 (HSG Cấp Quận)", icon: "🔥", color: "purple", level: "HSG Cấp Quận", time: "45 phút",
+trac_nghiem: [
+{ q_title: "Câu 1", q_content: "Số chẵn nhỏ nhất có ba chữ số khác nhau mà tích các chữ số bằng $12$&nbsp;là:", options: ["A. $162$", "B. $126$", "C. $134$", "D. $216$"], correct_idx: 1, explain: "Phân tích 12 thành tích 3 chữ số khác nhau: (1, 2, 6) hoặc (1, 3, 4). Để lập số NHỎ NHẤT, chọn hàng trăm là $1$. Từ bộ (1, 2, 6) ghép được $126$. Từ bộ (1, 3, 4) ghép được $134$. Vì yêu cầu SỐ CHẴN nên cả 126 và 134 đều thỏa mãn. So sánh: $126 < 134$. Vậy số nhỏ nhất là $126$." },
+{ q_title: "Câu 2", q_content: "Tìm $x$, biết: $x : 5 = 100 - 94$", options: ["A. $30$", "B. $35$", "C. $6$", "D. $25$"], correct_idx: 0, explain: "Tính vế phải: $100 - 94 = 6$. Biểu thức trở thành $x : 5 = 6$. Tìm số bị chia: $x = 6 \\times 5 = 30$." },
+{ q_title: "Câu 3", q_content: "Hình nào dưới đây đã tô màu $\\frac{1}{3}$ hình?", options: ["<div class='flex items-center gap-2'>A. <svg width='60' height='60' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='black' stroke-width='2'/><path d='M 50 50 L 50 10 A 40 40 0 0 1 85 70 Z' fill='#93c5fd' stroke='black' stroke-width='2'/><line x1='50' y1='50' x2='50' y2='10' stroke='black' stroke-width='2'/><line x1='50' y1='50' x2='15' y2='70' stroke='black' stroke-width='2'/><line x1='50' y1='50' x2='85' y2='70' stroke='black' stroke-width='2'/></svg></div>", "<div class='flex items-center gap-2'>B. <svg width='60' height='60' viewBox='0 0 100 100'><polygon points='50,10 10,90 90,90' fill='none' stroke='black' stroke-width='2'/><polygon points='50,10 50,90 10,90' fill='#93c5fd' stroke='black' stroke-width='2'/></svg></div>", "<div class='flex items-center gap-2'>C. <svg width='60' height='60' viewBox='0 0 100 100'><rect x='10' y='20' width='80' height='60' fill='none' stroke='black' stroke-width='2'/><rect x='10' y='20' width='26.6' height='60' fill='#93c5fd' stroke='black' stroke-width='2'/><line x1='36.6' y1='20' x2='36.6' y2='80' stroke='black' stroke-width='2'/><line x1='63.3' y1='20' x2='63.3' y2='80' stroke='black' stroke-width='2'/></svg></div>", "D. Tất cả các hình trên"], correct_idx: 2, explain: "Một phần ba ($1/3$) nghĩa là hình phải được chia làm 3 phần <strong>bằng nhau</strong> và tô màu 1 phần. Hình A chia 3 phần nhưng phần dưới to hơn 2 phần trên. Hình B chia làm 2 phần ($1/2$). Hình C chia làm 3 phần bằng nhau và tô 1 phần, nên đáp án C đúng." },
+{ q_title: "Câu 4", q_content: "Đồng hồ đang chỉ mấy giờ?<br><svg width='120' height='120' viewBox='0 0 100 100' class='mx-auto my-4'><circle cx='50' cy='50' r='45' fill='white' stroke='#1f2937' stroke-width='3'/><circle cx='50' cy='50' r='3' fill='#1f2937'/><line x1='50' y1='50' x2='22' y2='57' stroke='#1f2937' stroke-width='4' stroke-linecap='round'/><line x1='50' y1='50' x2='85' y2='50' stroke='#ef4444' stroke-width='2' stroke-linecap='round'/><text x='50' y='18' text-anchor='middle' font-size='10' font-weight='bold'>12</text><text x='85' y='53' text-anchor='middle' font-size='10' font-weight='bold'>3</text><text x='50' y='90' text-anchor='middle' font-size='10' font-weight='bold'>6</text><text x='15' y='53' text-anchor='middle' font-size='10' font-weight='bold'>9</text><text x='25' y='78' text-anchor='middle' font-size='10' font-weight='bold'>7</text><text x='18' y='68' text-anchor='middle' font-size='10' font-weight='bold'>8</text></svg>", options: ["A. $8$&nbsp;giờ $15$&nbsp;phút", "B. $9$&nbsp;giờ $3$&nbsp;phút", "C. $9$&nbsp;giờ $15$&nbsp;phút", "D. $8$&nbsp;giờ $3$&nbsp;phút"], correct_idx: 0, explain: "Kim ngắn (màu đen) đã vượt qua số 8 $\\Rightarrow 8$&nbsp;giờ. Kim dài (màu đỏ) chỉ số 3 $\\Rightarrow 15$&nbsp;phút. Vậy đồng hồ chỉ $8$&nbsp;giờ $15$&nbsp;phút." },
+{ q_title: "Câu 5", q_content: "Một hình tam giác có ba cạnh bằng nhau. Biết chu vi của hình tam giác đó là $24\\text{ cm}$. Hỏi mỗi cạnh của tam giác dài bao nhiêu xăng-ti-mét?", options: ["A. $12\\text{ cm}$", "B. $6\\text{ cm}$", "C. $8\\text{ cm}$", "D. $72\\text{ cm}$"], correct_idx: 2, explain: "Chu vi là tổng độ dài $3$&nbsp;cạnh. Vì $3$&nbsp;cạnh bằng nhau nên độ dài một cạnh là: $24 : 3 = 8\\text{ (cm)}$." },
+{ q_title: "Câu 6", q_content: "Trong các khối hình học sau đây, những khối nào có thể lăn được?", options: ["A. Khối lập phương và khối cầu", "B. Khối hộp chữ nhật và khối trụ", "C. Khối cầu và khối trụ", "D. Khối lập phương và khối hộp chữ nhật"], correct_idx: 2, explain: "Khối cầu tròn đều nên lăn được về mọi phía. Khối trụ có bề mặt cong nên lăn được khi đặt nằm ngang." },
+{ q_title: "Câu 7", q_content: "Cho dãy số: $1, 4, 9, 16, 25, \\dots$&nbsp;Số thích hợp điền vào chỗ chấm là:", options: ["A. $36$", "B. $34$", "C. $35$", "D. $30$"], correct_idx: 0, explain: "Khoảng cách giữa các số tăng dần theo dãy số lẻ liên tiếp: $+3, +5, +7, +9$. Số tiếp theo phải cộng thêm $11$, ta có: $25 + 11 = 36$." },
+{ q_title: "Câu 8", q_content: "Hôm nay là thứ Năm, ngày mùng $5$. Hỏi thứ Năm tuần sau là ngày mùng mấy?", options: ["A. Mùng $11$", "B. Mùng $12$", "C. Mùng $13$", "D. Mùng $10$"], correct_idx: 1, explain: "Một tuần có $7$&nbsp;ngày. Cùng một thứ ở tuần sau sẽ cách ngày hiện tại $7$&nbsp;ngày. Ta có: $5 + 7 = 12$. Vậy thứ Năm tuần sau là ngày mùng $12$." },
+{ q_title: "Câu 9", q_content: "Dọc theo một đoạn đường dài $40\\text{ m}$, người ta trồng các cột đèn cách đều nhau, cứ $4\\text{ m}$&nbsp;lại trồng $1$&nbsp;cột đèn. Biết rằng cả hai đầu đoạn đường đều có cột đèn. Hỏi người ta đã trồng tất cả bao nhiêu cột đèn?", options: ["A. $9$&nbsp;cột", "B. $10$&nbsp;cột", "C. $11$&nbsp;cột", "D. $12$&nbsp;cột"], correct_idx: 2, explain: "Số khoảng cách là: $40 : 4 = 10$&nbsp;(khoảng). Vì trồng ở CẢ HAI ĐẦU nên số cột đèn lớn hơn số khoảng là 1. Vậy trồng được: $10 + 1 = 11$&nbsp;(cột đèn)." },
+{ q_title: "Câu 10", q_content: "Trên cân thăng bằng, đĩa trái có $2$&nbsp;quả Táo, đĩa phải có $6$&nbsp;quả Mận. Ở một cân khác, đĩa trái có $1$&nbsp;quả Táo và $2$&nbsp;quả Mận. Hỏi cần đặt bao nhiêu quả Mận lên đĩa phải để cân thăng bằng?", options: ["A. $3$&nbsp;quả", "B. $4$&nbsp;quả", "C. $5$&nbsp;quả", "D. $6$&nbsp;quả"], correct_idx: 2, explain: "Từ cân thứ nhất: $2$&nbsp;Táo = $6$&nbsp;Mận $\\Rightarrow$ $1$&nbsp;Táo = $3$&nbsp;Mận. Ở cân thứ hai có: $1$&nbsp;Táo + $2$&nbsp;Mận. Thay $1$&nbsp;Táo bằng $3$&nbsp;Mận, ta có tổng cộng: $3$&nbsp;Mận + $2$&nbsp;Mận = $5$&nbsp;quả Mận." },
+{ q_title: "Câu 11", q_content: "Trong hộp kín có $7$&nbsp;viên bi đỏ và $7$&nbsp;viên bi xanh. Không nhìn vào hộp, lấy ra ít nhất bao nhiêu viên bi để <strong>chắc chắn</strong> có cả hai màu bi?", options: ["A. $2$&nbsp;viên", "B. $7$&nbsp;viên", "C. $8$&nbsp;viên", "D. $14$&nbsp;viên"], correct_idx: 2, explain: "Trường hợp xui xẻo nhất: Bốc được toàn bộ $7$&nbsp;viên bi cùng một màu (toàn đỏ hoặc toàn xanh). Lúc này ta vẫn chưa đủ 2 màu. Viên thứ $8$&nbsp;bắt buộc phải mang màu còn lại. Cần bốc ít nhất $8$&nbsp;viên." },
+{ q_title: "Câu 12", q_content: "Bốn đội bóng đá thi đấu vòng tròn một lượt (mỗi đội đều phải đá với tất cả các đội còn lại đúng một trận). Hỏi có tất cả bao nhiêu trận đấu diễn ra?", options: ["A. $4$&nbsp;trận", "B. $6$&nbsp;trận", "C. $8$&nbsp;trận", "D. $12$&nbsp;trận"], correct_idx: 1, explain: "Logic giống bài toán bắt tay: Đội thứ nhất đá $3$&nbsp;trận. Đội thứ hai đá $2$&nbsp;trận (với các đội chưa đá). Đội thứ ba đá $1$&nbsp;trận. Đội thứ tư không còn ai chưa đá. Tổng cộng: $3 + 2 + 1 = 6$&nbsp;trận." }
+],
+tu_luan: [
+{ t_title: "Bài 1", t_content: "Đặt tính rồi tính:<br>a) $605 - 248$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b) $379 + 421$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c) $1000 - 9$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; d) $87 + 456$", strategy: "Viết thẳng cột hàng đơn vị, chục, trăm. Đặc biệt chú ý câu c (mượn liên tiếp qua các số 0) và câu d (cộng số có 2 chữ số với số có 3 chữ số).", solution: "<div class='flex flex-wrap gap-8 justify-around my-4 text-lg'><div>$$\\begin{array}{rr} & 605 \\\\ - & 248 \\\\ \\hline & \\mathbf{\\color{red}{357}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 379 \\\\ + & 421 \\\\ \\hline & \\mathbf{\\color{red}{800}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 1000 \\\\ - & 9 \\\\ \\hline & \\mathbf{\\color{red}{991}} \\end{array}$$</div><div>$$\\begin{array}{rr} & 87 \\\\ + & 456 \\\\ \\hline & \\mathbf{\\color{red}{543}} \\end{array}$$</div></div>" },
+{ t_title: "Bài 2", t_content: "Tính nhanh (Bằng cách thuận tiện nhất):<br>$28 + 35 + 42 + 65 + 72 + 58$", strategy: "Quan sát chữ số hàng đơn vị. Nhóm các số có tổng chữ số hàng đơn vị bằng 10 để tạo thành các số tròn chục, tròn trăm.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Ta có:</div><div>$28 + 35 + 42 + 65 + 72 + 58$</div><div>$= (28 + 72) + (35 + 65) + (42 + 58)$</div><div>$= 100 + 100 + 100$</div><div>$= 300$</div>" },
+{ t_title: "Bài 3", t_content: "Điền chữ số thích hợp vào dấu $\\square$ trong phép tính sau:<br><div class='text-2xl text-center my-4'>$5\\square + \\square 8 = 93$</div>", strategy: "Giải mã phép tính ẩn từ phải sang trái.<br>Cột đơn vị: $\\square + 8$ tận cùng là $3$. Vậy phải là $13$. Suy ra ô vuông thứ nhất bằng $5$ (và nhớ $1$).<br>Cột chục: $5 + \\square + 1 = 9$. Suy ra ô vuông thứ hai bằng $3$.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Nhẩm theo hàng dọc:</div><div>- Ở hàng đơn vị: Mấy cộng với $8$ để có tận cùng là $3$? Ta có $5 + 8 = 13$ (viết $3$ nhớ $1$). Vậy ô vuông thứ nhất điền <strong>$5$</strong>.</div><div>- Ở hàng chục: $5$ cộng với ô vuông thứ hai rồi cộng thêm phần nhớ là $1$ thì bằng $9$. Tức là $6 + \\square = 9$. Vậy ô vuông thứ hai điền <strong>$3$</strong>.</div><div>Phép tính hoàn chỉnh là: <strong>$55 + 38 = 93$</strong>.</div>" },
+{ t_title: "Bài 4", t_content: "Cô giáo có $45$&nbsp;viên kẹo. Cô cho bạn lớp trưởng $5$&nbsp;viên kẹo. Số kẹo còn lại cô đem chia đều cho $5$&nbsp;tổ. Hỏi mỗi tổ nhận được bao nhiêu viên kẹo?", strategy: "Bài toán giải bằng $2$&nbsp;bước tính. Bước 1: Tính số kẹo còn lại của cô giáo (dùng phép trừ). Bước 2: Chia đều số kẹo còn lại cho 5 tổ (dùng phép chia).", solution: "<div><span class='font-bold text-blue-700'>Tóm tắt:</span></div><div>Cô có: $45$&nbsp;viên kẹo</div><div>Cho lớp trưởng: $5$&nbsp;viên kẹo</div><div>Còn lại chia đều: $5$&nbsp;tổ</div><div>Mỗi tổ: $\\dots$&nbsp;viên kẹo?</div><br><div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Sau khi cho bạn lớp trưởng, cô giáo còn lại số viên kẹo là:</div><div>$45 - 5 = 40$&nbsp;(viên)</div><div>Mỗi tổ nhận được số viên kẹo là:</div><div>$40 : 5 = 8$&nbsp;(viên)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $8$&nbsp;viên kẹo.</span></div>" },
+{ t_title: "Bài 5", t_content: "Bố dùng một đoạn dây thép uốn thành một cái khung hình chữ nhật có chiều dài là $15\\text{ cm}$, chiều rộng là $5\\text{ cm}$. Hỏi đoạn dây thép đó dài bao nhiêu xăng-ti-mét?", strategy: "Chiều dài của đoạn dây thép dùng để uốn thành hình chữ nhật chính bằng chu vi của hình chữ nhật đó. Chu vi hình chữ nhật bằng tổng độ dài 4 cạnh (2 chiều dài + 2 chiều rộng).", solution: "<div><span class='font-bold text-blue-700'>Tóm tắt:</span></div><div>Khung hình chữ nhật có:</div><div>Chiều dài: $15\\text{ cm}$</div><div>Chiều rộng: $5\\text{ cm}$</div><div>Đoạn dây (Chu vi): $\\dots\\text{ cm}$?</div><br><div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Chiều dài đoạn dây thép bằng chu vi của khung hình chữ nhật. Hình chữ nhật có hai chiều dài và hai chiều rộng.</div><div>Đoạn dây thép đó dài số xăng-ti-mét là:</div><div>$15 + 5 + 15 + 5 = 40$&nbsp;(cm)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $40\\text{ cm}$.</span></div>" },
+{ t_title: "Bài 6", t_content: "Một nông trại nuôi $12$&nbsp;con vật gồm bò và đà điểu. Bác nông dân đếm được tổng cộng có $34$&nbsp;cái chân bò và chân đà điểu. Hỏi nông trại đó nuôi bao nhiêu con đà điểu?", strategy: "Bài toán đếm chân con vật - Phương pháp giả thiết tạm. Bò có 4 chân, đà điểu có 2 chân. Giả sử tất cả đều là đà điểu để tìm số chân bị hụt. Lấy số chân hụt chia cho độ chênh lệch số chân của hai loài để tìm số con bò. Sau đó mới tính số đà điểu.", solution: "<div><span class='font-bold text-blue-700'>Bài giải:</span></div><div>Giả sử cả $12$&nbsp;con đều là đà điểu (mỗi con $2$&nbsp;chân). Khi đó tổng số chân là:</div><div>$12 \\times 2 = 24$&nbsp;(chân)</div><div>Số chân bị hụt đi so với thực tế là:</div><div>$34 - 24 = 10$&nbsp;(chân)</div><div>Mỗi con bò ($4$&nbsp;chân) nhiều hơn đà điểu $2$&nbsp;chân. Số con bò ở nông trại là:</div><div>$10 : 2 = 5$&nbsp;(con bò)</div><div>Số con đà điểu ở nông trại là:</div><div>$12 - 5 = 7$&nbsp;(con)</div><div><span class='font-bold mt-2 text-indigo-700 block'>Đáp số: $7$&nbsp;con đà điểu.</span></div>" }
 ]
 });
 </script>
