@@ -11,11 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-body.print-full-page .student-workspace > div > .empty-workspace {
-display: flex;
-flex-direction: column;
-flex-grow: 1;
-}
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+<style>
+body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; }
 .answer-explanation { display: none; }
 .show-answers .answer-explanation { display: block; }
 .show-answers .correct-option {
@@ -98,8 +96,8 @@ flex-grow: 1;
 display: flex;
 align-items: stretch;
 }
-/* Từng cột bung ra */
-body.print-full-page .student-workspace > div > div {
+/* Từng cột bung ra (Chỉ tác động vào ô ly, không ép hiện hướng dẫn/đáp án) */
+body.print-full-page .student-workspace > div > .empty-workspace {
 display: flex;
 flex-direction: column;
 flex-grow: 1;
