@@ -339,6 +339,9 @@ totalLines = actualLines;
 if (t.lines_needed) {
 totalLines = t.lines_needed;
 }
+if (index >= 1 && index <= 5) {
+totalLines += 4;
+}
 // Tính chiều cao tối thiểu cho khung trắng (dành cho chế độ in/làm bài)
 const lineSize = 40;
 const workspaceHeight = totalLines * lineSize;
